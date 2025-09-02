@@ -1,0 +1,13 @@
+# venvs
+venv/
+.env
+backend/.env
+*.pyc
+__pycache__/
+riot_cache*
+# IDE
+.vscode/
+.idea/
+# mac/win
+.DS_Store
+Thumbs.db
