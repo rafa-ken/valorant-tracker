@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import logging, os
+import logging, os, time
 from dotenv import load_dotenv
 import requests
 from requests.adapters import HTTPAdapter
@@ -69,6 +69,9 @@ def _error(status, code, detail):
 def health():
     return {"ok": True}
 
+# -----------------------------
+# VAL-CONTENT-V1 (Riot oficial)
+# -----------------------------
 @app.get("/api/content")
 def content():
     region, locale = _region(), _locale()
@@ -83,6 +86,9 @@ def content():
         return _error(r.status_code, "riot_error", r.text)
     return r.json()
 
+# -----------------------------
+# VAL-RANKED-V1 (Riot oficial)
+# -----------------------------
 @app.get("/api/leaderboard")
 def leaderboard():
     region = _region()
@@ -107,6 +113,9 @@ def leaderboard():
     data["players"] = data.get("players") or data.get("Players") or []
     return data
 
+# ----------------------------
+# VAL-STATUS-V1 (Riot oficial)
+# ----------------------------
 @app.get("/api/status")
 def status():
     region = _region()
@@ -120,6 +129,58 @@ def status():
     if r.status_code != 200:
         return _error(r.status_code, "riot_error", r.text)
     return r.json()
+
+# ---------------------------------------------------
+# SKINS (não-oficial) — proxy do valorant-api.com
+# ---------------------------------------------------
+# Observação: esta rota NÃO usa a chave da Riot.
+# Documentação da comunidade: https://valorant-api.com/
+SKINS_BASE = "https://valorant-api.com/v1/weapons/skins"
+SKINS_TTL  = 3600  # cache em memória (1h)
+_sk_cache = {"ts": 0, "key": "", "data": None}
+
+@app.get("/api/skins")
+def skins():
+    """
+    Retorna lista de skins de armas (via valorant-api.com).
+    Parâmetros:
+      - language (default: pt-BR) — ex: en-US, es-ES
+      - weaponUuid (opcional)     — filtra por arma específica
+      - q (opcional)              — filtro textual por nome
+    """
+    language = request.args.get("language", "pt-BR")
+    weapon_uuid = request.args.get("weaponUuid")
+    q = (request.args.get("q") or "").strip().lower()
+
+    cache_key = f"{language}:{weapon_uuid or ''}"
+    now = time.time()
+
+    # cache simples em memória
+    if _sk_cache["data"] and _sk_cache["key"] == cache_key and (now - _sk_cache["ts"]) < SKINS_TTL:
+        data = _sk_cache["data"]
+    else:
+        params = {"language": language}
+        if weapon_uuid:
+            params["weaponUuid"] = weapon_uuid  # a API aceita filtro por arma
+        try:
+            resp = requests.get(SKINS_BASE, params=params, timeout=TIMEOUT)
+        except requests.RequestException as e:
+            log.exception("skins upstream request failed")
+            return _error(502, "skins_upstream_error", str(e))
+
+        if resp.status_code != 200:
+            return _error(resp.status_code, "skins_upstream_error", resp.text)
+
+        payload = resp.json()
+        data = payload.get("data", [])
+        _sk_cache.update({"ts": now, "key": cache_key, "data": data})
+
+    # filtro textual no servidor (opcional)
+    if q:
+        ql = q.lower()
+        data = [s for s in data if ql in (s.get("displayName") or "").lower()]
+
+    return {"skins": data}
 
 if __name__ == "__main__":
     app.run(debug=True, port=PORT)

@@ -11,3 +11,35 @@ riot_cache*
 # mac/win
 .DS_Store
 Thumbs.db
+# dependências
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# build output
+dist/
+dist-ssr/
+*.local
+
+# editor/IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# sistema
+.DS_Store
+Thumbs.db
+
+# ambiente
+.env
+.env.local
+.env.*.local
+
+# caches
+.cache/
+*.tsbuildinfo
