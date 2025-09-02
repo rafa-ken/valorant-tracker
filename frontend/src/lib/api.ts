@@ -1,10 +1,13 @@
 import { http } from "./http";
-import type { ContentResponse, LeaderboardResponse, SkinsResponse } from "./types";
 
 export const api = {
-  content: (region: string, locale = "pt-BR") => http<ContentResponse>("/content", { region, locale }),
+  content: (region: string, locale = "pt-BR") => http("/content", { region, locale }),
   leaderboard: (actId: string, opts: { region: string; size?: number; startIndex?: number }) =>
-    http<LeaderboardResponse>("/leaderboard", { actId, ...opts }),
-  skins: (params: { language?: string; q?: string; weaponUuid?: string } = {}) =>
-    http<SkinsResponse>("/skins", params as any),
+    http("/leaderboard", { actId, ...opts }),
+  skins: (params: { language?: string; q?: string; weaponUuid?: string } = {}) => http("/skins", params as any),
+
+  // NOVO:
+  weapons: (language = "pt-BR") => http("/weapons", { language }),
+  weaponSkins: (weaponUuid: string, language = "pt-BR") =>
+    http(`/weapons/${weaponUuid}/skins`, { language }),
 };

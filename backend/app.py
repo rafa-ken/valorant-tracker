@@ -182,5 +182,79 @@ def skins():
 
     return {"skins": data}
 
+WEAPONS_BASE = "https://valorant-api.com/v1/weapons"
+WEAPONS_TTL  = 3600  # 1h
+
+_weapons_cache = {"ts": 0, "key": "", "data": None}
+_weapon_skins_cache = {}  # key: f"{lang}:{uuid}" -> {ts, data}
+
+@app.get("/api/weapons")
+def weapons():
+    """
+    Lista todas as armas (inclui Melee/Faca).
+    Params:
+      - language (default: pt-BR)
+    """
+    language = request.args.get("language", "pt-BR")
+    key = language
+    now = time.time()
+
+    if _weapons_cache["data"] and _weapons_cache["key"] == key and (now - _weapons_cache["ts"]) < WEAPONS_TTL:
+        data = _weapons_cache["data"]
+    else:
+        try:
+            resp = requests.get(WEAPONS_BASE, params={"language": language}, timeout=TIMEOUT)
+            if resp.status_code != 200:
+                return _error(resp.status_code, "weapons_upstream_error", resp.text)
+            payload = resp.json()
+            data = payload.get("data", [])
+            _weapons_cache.update({"ts": now, "key": key, "data": data})
+        except requests.RequestException as e:
+            log.exception("weapons upstream failed")
+            return _error(502, "weapons_upstream_error", str(e))
+
+    # enxugar o payload pra front (uuid + nome + ícone opcional)
+    items = [
+        {
+            "uuid": w.get("uuid"),
+            "displayName": w.get("displayName"),
+            "displayIcon": w.get("displayIcon"),
+            "category": w.get("category"),
+        }
+        for w in data
+    ]
+    return {"weapons": items}
+
+@app.get("/api/weapons/<weapon_uuid>/skins")
+def weapon_skins(weapon_uuid: str):
+    """
+    Skins de uma arma específica (por UUID).
+    Params:
+      - language (default: pt-BR)
+    """
+    language = request.args.get("language", "pt-BR")
+    cache_key = f"{language}:{weapon_uuid}"
+    now = time.time()
+
+    cached = _weapon_skins_cache.get(cache_key)
+    if cached and (now - cached["ts"]) < WEAPONS_TTL:
+        return {"skins": cached["data"]}
+
+    try:
+        # a API retorna o objeto da arma inteiro; extraímos 'skins'
+        resp = requests.get(f"{WEAPONS_BASE}/{weapon_uuid}", params={"language": language}, timeout=TIMEOUT)
+        if resp.status_code != 200:
+            return _error(resp.status_code, "weapon_upstream_error", resp.text)
+        weapon = resp.json().get("data") or {}
+        skins = weapon.get("skins") or []
+    except requests.RequestException as e:
+        log.exception("weapon upstream failed")
+        return _error(502, "weapon_upstream_error", str(e))
+
+    # salva cache simples
+    _weapon_skins_cache[cache_key] = {"ts": now, "data": skins}
+    return {"skins": skins}
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=PORT)
